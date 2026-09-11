@@ -474,6 +474,94 @@ fn custom_binding_invokes_only_the_endpoint_manifest_id() {
 }
 
 #[test]
+fn direct_and_prefix_plugin_keys_capture_the_retained_selection() {
+    for (key, copy_mode) in [("alt+a", false), ("prefix+a", false), ("prefix+a", true)] {
+        for copy_on_select in [false, true] {
+            let mut config: Config = toml::from_str(&format!(
+                "[[keys.command]]\nkey = '{key}'\ntype = 'plugin_action'\ncommand = 'annotate.capture'\n"
+            )).unwrap();
+            config.ui.copy_on_select = copy_on_select;
+            let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+            let mut projected = snapshot();
+            projected
+                .commands
+                .push(crate::protocol::ClientShellCommand {
+                    command_id: "annotation".into(),
+                    binding_label: key.into(),
+                    binding_labels: vec![key.into()],
+                    action: crate::protocol::ClientShellCommandAction::PluginAction,
+                    description: None,
+                });
+            state.set_snapshot(Box::new(projected));
+            let mut pane_surface = surface();
+            pane_surface.panes[0].scroll = Some(crate::protocol::PaneSurfaceScrollMetrics {
+                offset_from_bottom: 0,
+                max_offset_from_bottom: 0,
+                viewport_rows: 2,
+            });
+            state.set_pane_surface(pane_surface);
+            if copy_mode {
+                state.compose(106, 20).expect("composed frame");
+                assert!(state.enter_copy_mode(&mut ClientShellInput::default()));
+                for key in ['g', '0', 'v', 'l', 'l'] {
+                    state.handle_raw_events(vec![RawInputEvent::Key(
+                        crate::input::TerminalKey::new(KeyCode::Char(key), KeyModifiers::empty()),
+                    )]);
+                }
+                assert!(state
+                    .selection
+                    .as_ref()
+                    .is_some_and(crate::selection::Selection::is_visible));
+            } else {
+                let mut selection =
+                    crate::selection::Selection::absolute_range("pane_1".into(), (0, 0), (0, 2));
+                assert!(selection.finish());
+                state.selection = Some(selection);
+            }
+            if key == "prefix+a" {
+                let prefix = state.handle_input_bytes(&[2]);
+                assert!(prefix.actions.is_empty());
+                assert!(
+                    state.selection.is_some(),
+                    "the prefix must retain selection"
+                );
+            }
+
+            let invoked = if key == "alt+a" {
+                state.handle_raw_events(vec![RawInputEvent::Key(crate::input::TerminalKey::new(
+                    KeyCode::Char('a'),
+                    KeyModifiers::ALT,
+                ))])
+            } else {
+                state.handle_input_bytes(b"a")
+            };
+
+            assert!(invoked.requests.is_empty());
+            let [ClientShellAction::Endpoint { request, .. }] = &invoked.actions[..] else {
+                panic!("plugin key must invoke the command");
+            };
+            let crate::api::schema::Method::CommandInvoke(params) = &request.method else {
+                panic!("expected command.invoke");
+            };
+            assert_eq!(params.command_id, "annotation");
+            if copy_mode {
+                assert_eq!(state.mode, ClientShellMode::Copy);
+                assert!(state.selection.is_some());
+            }
+            assert_eq!(
+                params.selection,
+                Some(crate::api::schema::PaneSelectionReadParams {
+                    pane_id: "pane_1".into(),
+                    anchor: crate::api::schema::PaneTextPoint { row: 0, col: 0 },
+                    cursor: crate::api::schema::PaneTextPoint { row: 0, col: 2 },
+                    content_revision: Some(0),
+                })
+            );
+        }
+    }
+}
+
+#[test]
 fn plugin_command_carries_client_owned_selection_coordinates() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let binding = crate::config::CustomCommandKeybind {

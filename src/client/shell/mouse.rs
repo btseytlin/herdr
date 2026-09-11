@@ -1650,7 +1650,6 @@ impl ClientShellState {
                 .is_some_and(crate::selection::Selection::finish);
             if copied && self.config.copy_on_select {
                 self.request_selection_copy(outcome, false);
-                self.selection = None;
             } else if !copied {
                 self.selection = None;
             }
@@ -1817,7 +1816,6 @@ impl ClientShellState {
                     outcome.repaint = true;
                 }
                 self.stop_selection_autoscroll();
-                self.selection_highlight_clear_deadline = None;
                 self.pending_word_selection = None;
                 let previous_pane_click = self.last_pane_click.take();
                 self.workspace_press = None;

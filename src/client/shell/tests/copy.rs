@@ -104,7 +104,10 @@ fn client_mouse_selection_highlights_and_copies_through_endpoint_extraction() {
             row: pane.inner_rect.y,
             modifiers: KeyModifiers::empty(),
         })]);
-    assert!(state.selection.is_none());
+    assert!(state
+        .selection
+        .as_ref()
+        .is_some_and(crate::selection::Selection::is_finalized));
     let [ClientShellAction::Endpoint { request, .. }] = &release.actions[..] else {
         panic!("selection release should request endpoint extraction");
     };
@@ -137,6 +140,73 @@ fn client_mouse_selection_highlights_and_copies_through_endpoint_extraction() {
             .map(|feedback| feedback.message.as_str()),
         Some("copied to clipboard")
     );
+}
+
+#[test]
+fn explicit_copy_retains_selection_with_either_automatic_copy_setting() {
+    for copy_on_select in [false, true] {
+        for modifiers in [KeyModifiers::CONTROL, KeyModifiers::SUPER] {
+            let mut config = Config::default();
+            config.ui.copy_on_select = copy_on_select;
+            let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+            state.set_snapshot(Box::new(snapshot()));
+            state.set_pane_surface(surface());
+            let mut selection =
+                crate::selection::Selection::absolute_range("pane_1".into(), (0, 0), (0, 2));
+            assert!(selection.finish());
+            state.selection = Some(selection);
+
+            let copied = state.handle_raw_events(vec![RawInputEvent::Key(
+                crate::input::TerminalKey::new(KeyCode::Char('c'), modifiers),
+            )]);
+
+            assert!(copied.requests.is_empty());
+            assert!(state
+                .selection
+                .as_ref()
+                .is_some_and(crate::selection::Selection::is_visible));
+            let [ClientShellAction::Endpoint { request, .. }] = &copied.actions[..] else {
+                panic!("explicit copy must request selected text");
+            };
+            assert!(
+                matches!(&request.method, crate::api::schema::Method::PaneSelectionRead(params)
+                if params.anchor == crate::api::schema::PaneTextPoint { row: 0, col: 0 }
+                    && params.cursor == crate::api::schema::PaneTextPoint { row: 0, col: 2 })
+            );
+            let (_, actions) = state.handle_endpoint_result(
+                "boot-1",
+                &request.id.clone(),
+                Ok(crate::api::schema::ResponseResult::PaneSelection {
+                    pane_id: "pane_1".into(),
+                    text: "LIV".into(),
+                }),
+            );
+            assert!(
+                matches!(&actions[..], [ClientShellAction::ClipboardWrite(bytes)] if bytes == b"LIV")
+            );
+            assert!(state.selection.is_some());
+        }
+    }
+}
+
+#[test]
+fn ordinary_typing_clears_selection_and_control_c_without_selection_reaches_pane() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    let mut selection =
+        crate::selection::Selection::absolute_range("pane_1".into(), (0, 0), (0, 2));
+    assert!(selection.finish());
+    state.selection = Some(selection);
+
+    let typed = state.handle_input_bytes(b"x");
+
+    assert!(state.selection.is_none());
+    assert_eq!(typed.requests.len(), 1);
+    assert!(typed.actions.is_empty());
+    let interrupt = state.handle_input_bytes(&[3]);
+    assert_eq!(interrupt.requests.len(), 1);
+    assert!(interrupt.actions.is_empty());
 }
 
 #[test]
@@ -242,7 +312,10 @@ fn retained_mouse_selection_survives_output_and_copies_without_terminal_input() 
         KeyCode::Char('c'),
         KeyModifiers::CONTROL,
     ))]);
-    assert!(state.selection.is_none());
+    assert!(state
+        .selection
+        .as_ref()
+        .is_some_and(crate::selection::Selection::is_finalized));
     assert!(matches!(
         &copy.actions[..],
         [ClientShellAction::Endpoint { request, .. }]
@@ -1233,6 +1306,7 @@ fn word_selection_result_survives_focus_snapshot_lag() {
         }),
     );
     assert!(repaint);
+    state.tick_copy_feedback(std::time::Instant::now() + std::time::Duration::from_secs(1));
     assert!(state
         .selection
         .as_ref()

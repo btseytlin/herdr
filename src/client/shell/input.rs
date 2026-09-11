@@ -136,7 +136,6 @@ impl ClientShellState {
         if self.copy_or_terminal_mode() != ClientShellMode::Copy && self.selection.take().is_some()
         {
             self.stop_selection_autoscroll();
-            self.selection_highlight_clear_deadline = None;
             outcome.repaint = true;
         }
         false
@@ -514,45 +513,40 @@ impl ClientShellState {
             return None;
         }
         self.pending_word_selection = None;
-        if self.mode != ClientShellMode::Copy
-            && self.copy_or_terminal_mode() != ClientShellMode::Copy
-            && !self.config.copy_on_select
+        let preserve_copy_selection = self.mode == ClientShellMode::Copy
+            || self.copy_or_terminal_mode() == ClientShellMode::Copy;
+        if !preserve_copy_selection
             && is_retained_selection_copy_key(key)
             && self
                 .selection
                 .as_ref()
                 .is_some_and(crate::selection::Selection::is_visible)
         {
-            self.request_selection_copy(outcome, true);
-            self.selection = None;
-            self.stop_selection_autoscroll();
-            self.selection_highlight_clear_deadline = None;
-            outcome.repaint = true;
+            if key.kind == KeyEventKind::Press {
+                self.request_selection_copy(outcome, true);
+                self.stop_selection_autoscroll();
+                outcome.repaint = true;
+            }
             return None;
         }
-        if self.mode != ClientShellMode::Copy
-            && self.copy_or_terminal_mode() != ClientShellMode::Copy
-            && self.selection.take().is_some()
-        {
-            self.stop_selection_autoscroll();
-            self.selection_highlight_clear_deadline = None;
-            outcome.repaint = true;
-        }
 
-        match self.mode {
+        let target = match self.mode {
             ClientShellMode::Terminal => {
                 if let Some(binding) =
                     crate::input::resolve_direct_binding(&self.config.keybinds.keybinds, key)
                 {
                     self.record_binding(binding, outcome);
-                    return None;
-                }
-                if crate::config::terminal_key_matches_combo(key, self.config.keybinds.prefix) {
+                    None
+                } else if crate::config::terminal_key_matches_combo(
+                    key,
+                    self.config.keybinds.prefix,
+                ) {
                     self.mode = ClientShellMode::Prefix;
                     outcome.repaint = true;
                     return None;
+                } else {
+                    self.focused_pane_id().map(ClientInputTarget::Pane)
                 }
-                self.focused_pane_id().map(ClientInputTarget::Pane)
             }
             ClientShellMode::Prefix => {
                 let return_mode = if self.copy_mode.as_ref().is_some_and(|copy_mode| {
@@ -562,27 +556,21 @@ impl ClientShellState {
                 } else {
                     ClientShellMode::Terminal
                 };
-                if crate::config::terminal_key_matches_combo(key, self.config.keybinds.prefix) {
-                    self.mode = return_mode;
-                    outcome.repaint = true;
-                    return self.focused_pane_id().map(ClientInputTarget::Pane);
-                }
-                if key.code == KeyCode::Esc {
-                    self.mode = return_mode;
-                    outcome.repaint = true;
-                    return None;
-                }
-                if let Some(binding) =
-                    crate::input::resolve_prefix_binding(&self.config.keybinds.keybinds, key)
-                {
-                    self.mode = return_mode;
-                    outcome.repaint = true;
-                    self.record_binding(binding, outcome);
-                    return None;
-                }
                 self.mode = return_mode;
                 outcome.repaint = true;
-                None
+                if crate::config::terminal_key_matches_combo(key, self.config.keybinds.prefix) {
+                    self.focused_pane_id().map(ClientInputTarget::Pane)
+                } else {
+                    if key.code != KeyCode::Esc {
+                        if let Some(binding) = crate::input::resolve_prefix_binding(
+                            &self.config.keybinds.keybinds,
+                            key,
+                        ) {
+                            self.record_binding(binding, outcome);
+                        }
+                    }
+                    None
+                }
             }
             ClientShellMode::Navigate => {
                 self.route_navigate_key(key, outcome);
@@ -601,7 +589,12 @@ impl ClientShellState {
                 }
                 None
             }
+        };
+        if !preserve_copy_selection && self.selection.take().is_some() {
+            self.stop_selection_autoscroll();
+            outcome.repaint = true;
         }
+        target
     }
 
     pub(super) fn copy_or_terminal_mode(&self) -> ClientShellMode {

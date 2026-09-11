@@ -700,8 +700,6 @@ impl ClientShellState {
                 if !self.config.copy_on_select {
                     return (true, Vec::new());
                 }
-                self.selection_highlight_clear_deadline =
-                    Some(std::time::Instant::now() + std::time::Duration::from_millis(500));
                 let mut outcome = ClientShellInput::default();
                 self.request_selection_copy(&mut outcome, false);
                 return (true, outcome.actions);

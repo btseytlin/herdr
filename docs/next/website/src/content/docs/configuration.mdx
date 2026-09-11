@@ -52,6 +52,12 @@ Reload applies most UI settings without restarting panes. Startup-only settings 
 
 Themes, sidebar layouts, copy behavior, and other presentation settings come from the client's local config, including when viewing an SSH machine. Pane defaults, worktrees, integrations, and custom commands belong to the server where the panes run. The UI's `reload config` action reloads both the client's local settings and the selected server's config. Local keybindings reload too; `--remote-keybindings server` instead uses the selected server's keybindings.
 
+## Mouse selection
+
+Mouse selections stay highlighted after copying. With `ui.copy_on_select = true` (the default), releasing a selection copies its text. Set it to `false` to copy only on request. Ctrl+C copies a visible selection without clearing it. Cmd+C does the same when the terminal forwards it to Herdr. Without a selection, Ctrl+C reaches the pane.
+
+Ordinary typing clears the selection. Direct and prefix plugin bindings capture its text before clearing it. Selections still clear when pane, geometry, or content changes invalidate them.
+
 ## Headless terminal size
 
 When no client is attached, the server uses a 120×40 virtual terminal for layout and newly created panes. Change that fallback for headless orchestration with:

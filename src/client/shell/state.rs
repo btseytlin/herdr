@@ -939,7 +939,6 @@ pub(crate) struct ClientShellState {
     pub(super) last_pane_click: Option<ClientPaneClick>,
     pub(super) selection_autoscroll: Option<ClientSelectionAutoscroll>,
     pub(super) selection_autoscroll_deadline: Option<std::time::Instant>,
-    pub(super) selection_highlight_clear_deadline: Option<std::time::Instant>,
     pub(super) pending_word_selection: Option<u64>,
     pub(super) word_selection_generation: u64,
     pub(super) copy_mode: Option<ClientCopyModeState>,
@@ -1082,7 +1081,6 @@ impl ClientShellState {
             last_pane_click: None,
             selection_autoscroll: None,
             selection_autoscroll_deadline: None,
-            selection_highlight_clear_deadline: None,
             pending_word_selection: None,
             word_selection_generation: 0,
             copy_mode: None,
@@ -1234,7 +1232,6 @@ impl ClientShellState {
         self.last_pane_click = None;
         self.selection_autoscroll = None;
         self.selection_autoscroll_deadline = None;
-        self.selection_highlight_clear_deadline = None;
         self.pending_word_selection = None;
         self.copy_mode = None;
         if self.mode == ClientShellMode::Copy {
@@ -1383,7 +1380,6 @@ impl ClientShellState {
             self.selection = None;
             self.selection_autoscroll = None;
             self.selection_autoscroll_deadline = None;
-            self.selection_highlight_clear_deadline = None;
             self.pending_word_selection = None;
             self.last_pane_click = None;
         }
@@ -1407,7 +1403,6 @@ impl ClientShellState {
                 {
                     self.selection = None;
                     self.stop_selection_autoscroll();
-                    self.selection_highlight_clear_deadline = None;
                 }
                 if self.mode == ClientShellMode::Copy {
                     self.mode = ClientShellMode::Terminal;
@@ -1427,7 +1422,6 @@ impl ClientShellState {
                 {
                     self.selection = None;
                     self.stop_selection_autoscroll();
-                    self.selection_highlight_clear_deadline = None;
                 }
                 if self.mode == ClientShellMode::Copy {
                     self.mode = ClientShellMode::Terminal;
@@ -1612,7 +1606,6 @@ impl ClientShellState {
             self.last_pane_click = None;
             self.selection_autoscroll = None;
             self.selection_autoscroll_deadline = None;
-            self.selection_highlight_clear_deadline = None;
             self.pending_word_selection = None;
             self.copy_mode = None;
             self.reset_copy_pipeline();
@@ -1665,7 +1658,6 @@ impl ClientShellState {
         if selection_content_changed {
             self.selection = None;
             self.stop_selection_autoscroll();
-            self.selection_highlight_clear_deadline = None;
         }
         for pane in &surface.panes {
             let Some(target) = self.pane_scroll_targets.get(&pane.pane_id).copied() else {
@@ -1720,7 +1712,6 @@ impl ClientShellState {
         }) {
             self.selection = None;
             self.stop_selection_autoscroll();
-            self.selection_highlight_clear_deadline = None;
         }
         self.popup_terminal_id = next_popup;
         self.graphics
@@ -1759,14 +1750,6 @@ impl ClientShellState {
         {
             self.copy_feedback = None;
             self.copy_feedback_deadline = None;
-            repaint = true;
-        }
-        if self
-            .selection_highlight_clear_deadline
-            .is_some_and(|deadline| now >= deadline)
-        {
-            self.selection = None;
-            self.selection_highlight_clear_deadline = None;
             repaint = true;
         }
         repaint
