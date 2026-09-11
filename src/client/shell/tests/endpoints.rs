@@ -53,6 +53,154 @@ fn state_with_remote() -> (ClientShellState, ClientEndpointId) {
 }
 
 #[test]
+fn hidden_agents_panel_reclaims_sidebar_space_without_changing_agents() {
+    for remote in [false, true] {
+        for collapsed in [false, true] {
+            let mut projected = snapshot();
+            projected
+                .agents
+                .push(agent("worker", AgentStatus::Working, 1));
+            let template = projected.workspaces[0].clone();
+            projected.workspaces = (1..=30)
+                .map(|number| ClientShellWorkspace {
+                    workspace_id: format!("ws_{number}"),
+                    number,
+                    label: format!("project-{number}"),
+                    focused: number == 1,
+                    ..template.clone()
+                })
+                .collect();
+            let mut state =
+                ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+            if remote {
+                let profile = remote_profile();
+                let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
+                state.set_endpoint_catalog(&[profile]);
+                state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
+                let mut remote_snapshot = snapshot();
+                remote_snapshot.boot_id = "remote-boot".into();
+                remote_snapshot
+                    .agents
+                    .push(agent("remote-worker", AgentStatus::Blocked, 2));
+                state.set_endpoint_snapshot(&endpoint_id, Box::new(remote_snapshot));
+            }
+            state.set_snapshot(Box::new(projected));
+            state.set_pane_surface(surface());
+            state.sidebar_collapsed = collapsed;
+            state.compose(106, 30).expect("visible agents panel");
+            let visible_workspaces = state.hits.workspaces.len();
+            assert!(!state.hits.agents.is_empty() || !state.hits.endpoint_agents.is_empty());
+
+            let hidden: Config = toml::from_str("[ui.sidebar.agents]\nenabled = false\n")
+                .expect("hidden panel config");
+            assert!(state.config.apply_live_config(&hidden, &[], &[]).is_empty());
+            state.compose(106, 30).expect("hidden agents panel");
+
+            assert!(
+                state.hits.agents.is_empty(),
+                "local agents must have no hit targets"
+            );
+            assert!(
+                state.hits.endpoint_agents.is_empty(),
+                "remote agents must have no hit targets"
+            );
+            assert!(state.hits.agent_body.is_empty());
+            assert!(state.hits.agent_sort_toggle.is_empty());
+            assert!(state.hits.agent_scrollbar.is_empty());
+            assert!(state.hits.sidebar_section_divider.is_empty());
+            assert!(state.hits.workspaces.len() > visible_workspaces);
+            assert_eq!(state.snapshot.as_ref().unwrap().agents.len(), 1);
+            if collapsed {
+                assert!(!state.hits.sidebar_toggle.is_empty());
+                assert!(state
+                    .hits
+                    .workspaces
+                    .iter()
+                    .all(|hit| { hit.rect.bottom() <= state.hits.sidebar_toggle.y }));
+            } else {
+                assert!(!state.hits.global_launcher.is_empty());
+                assert!(state
+                    .hits
+                    .global_launcher
+                    .intersection(state.hits.sidebar_toggle)
+                    .is_empty());
+                let body = state.hits.workspace_body;
+                state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
+                    kind: MouseEventKind::ScrollDown,
+                    column: body.x,
+                    row: body.y,
+                    modifiers: KeyModifiers::NONE,
+                })]);
+                assert_eq!(state.workspace_scroll, 1);
+            }
+
+            let mut focus = ClientShellInput::default();
+            state.record_binding(
+                crate::input::KeybindMatch::Action(crate::input::KeybindAction::FocusAgent(0)),
+                &mut focus,
+            );
+            assert!(
+                !focus.actions.is_empty(),
+                "explicit agent navigation stays available"
+            );
+            state.workspace_scroll = 0;
+            state.config.apply_live_config(&Config::default(), &[], &[]);
+            state.compose(106, 30).expect("restored agents panel");
+            assert_eq!(state.hits.workspaces.len(), visible_workspaces);
+            assert!(!state.hits.agents.is_empty() || !state.hits.endpoint_agents.is_empty());
+        }
+    }
+}
+
+#[test]
+fn hidden_agents_panel_handles_short_sidebars_without_agents() {
+    let hidden: Config = toml::from_str("[ui.sidebar.agents]\nenabled = false\n").unwrap();
+    for remote in [false, true] {
+        for collapsed in [false, true] {
+            let mut state = ClientShellState::new(ClientShellConfig::from_config(&hidden));
+            if remote {
+                state.set_endpoint_catalog(&[remote_profile()]);
+            }
+            state.set_snapshot(Box::new(snapshot()));
+            state.set_pane_surface(surface());
+            state.sidebar_collapsed = collapsed;
+            for height in [1, 2, 6, 7, 12] {
+                state
+                    .compose(106, height)
+                    .expect("short sidebar without agents");
+                assert!(state.hits.agents.is_empty());
+                assert!(state.hits.endpoint_agents.is_empty());
+                assert!(state.hits.agent_body.is_empty());
+                assert!(state.hits.sidebar_section_divider.is_empty());
+                if collapsed {
+                    assert!(state
+                        .hits
+                        .workspaces
+                        .iter()
+                        .all(|hit| { hit.rect.bottom() <= state.hits.sidebar_toggle.y }));
+                    assert!(state
+                        .hits
+                        .machines
+                        .iter()
+                        .all(|hit| { hit.rect.bottom() <= state.hits.sidebar_toggle.y }));
+                }
+            }
+            if collapsed {
+                state.compose(106, 12).unwrap();
+                let toggle = state.hits.sidebar_toggle;
+                state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
+                    kind: MouseEventKind::Down(MouseButton::Left),
+                    column: toggle.x,
+                    row: toggle.y,
+                    modifiers: KeyModifiers::NONE,
+                })]);
+                assert!(!state.sidebar_collapsed);
+            }
+        }
+    }
+}
+
+#[test]
 fn switching_machines_from_copy_mode_restores_terminal_input() {
     let (mut state, remote) = state_with_remote();
     let mut local_surface = surface();

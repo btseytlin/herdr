@@ -1,6 +1,91 @@
 use super::*;
 
 #[test]
+fn agents_panel_settings_toggle_saves_and_applies_without_server_requests() {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tmp")
+        .join(format!("agents-panel-settings-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("create settings fixture");
+    let path = directory.join("config.toml");
+    std::fs::write(&path, "[ui]\nmouse_capture = false\n").expect("write settings fixture");
+    let mut config = ClientShellConfig::from_config(&Config::default());
+    config.local_config_path = path.clone();
+    let mut state = ClientShellState::new(config);
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    state.handle_input_bytes(&[0x02]);
+    state.handle_input_bytes(b"s");
+    let section_index = ClientSettingsSection::ALL
+        .iter()
+        .position(|section| section.label() == "agents panel")
+        .expect("Settings must offer an Agents panel toggle");
+    for _ in 0..section_index {
+        let navigation = state.handle_input_bytes(b"\t");
+        assert!(navigation.actions.is_empty());
+    }
+    state.compose(106, 30).expect("Agents panel settings");
+    assert_eq!(state.hits.settings_choices.len(), 2);
+
+    for (key, enabled) in [(b"\x1b[B".as_slice(), false), (b"\x1b[A".as_slice(), true)] {
+        state.handle_input_bytes(key);
+        let outcome = state.handle_input_bytes(b"\r");
+        assert!(outcome.actions.is_empty(), "visibility is client-local");
+        assert!(outcome.requests.is_empty());
+        assert!(state.endpoint_error.is_none());
+        let saved: toml::Value = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            saved["ui"]["sidebar"]["agents"]["enabled"].as_bool(),
+            Some(enabled)
+        );
+        assert_eq!(saved["ui"]["mouse_capture"].as_bool(), Some(false));
+        assert_eq!(state.config.agents.enabled, enabled);
+        let reloaded: Config = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            ClientShellConfig::from_config(&reloaded).agents.enabled,
+            enabled
+        );
+    }
+    std::fs::remove_dir_all(directory).expect("remove settings fixture");
+}
+
+#[test]
+fn agents_panel_settings_failed_save_keeps_panel_visible() {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tmp")
+        .join(format!("agents-panel-save-error-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("create unreadable config fixture");
+    let mut config = ClientShellConfig::from_config(&Config::default());
+    config.local_config_path = directory.clone();
+    let mut state = ClientShellState::new(config);
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    state.compose(106, 30).expect("visible agents panel");
+    let visible_body = state.hits.workspace_body;
+    state.open_settings_overlay();
+    let section = ClientSettingsSection::ALL
+        .iter()
+        .copied()
+        .find(|section| section.label() == "agents panel")
+        .expect("Settings must offer an Agents panel toggle");
+    state.select_settings_section(section, &mut ClientShellInput::default());
+    state.handle_input_bytes(b"\x1b[B");
+
+    let outcome = state.handle_input_bytes(b"\r");
+
+    assert!(outcome.actions.is_empty());
+    assert!(state
+        .endpoint_error
+        .as_deref()
+        .is_some_and(|error| error.contains("failed to read config")));
+    state.handle_input_bytes(b"\x1b");
+    state
+        .compose(106, 30)
+        .expect("unchanged sidebar after failed save");
+    assert_eq!(state.hits.workspace_body, visible_body);
+    std::fs::remove_dir(directory).expect("remove unreadable config fixture");
+}
+
+#[test]
 fn shell_new_controls_use_the_same_client_action_routes_as_keybinds() {
     let mut config = Config::default();
     config.ui.prompt_new_workspace_name = false;

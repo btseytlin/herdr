@@ -6,10 +6,18 @@ use ratatui::{
 
 pub(in crate::client::shell) fn collapsed_sidebar_sections(
     area: Rect,
+    agents_enabled: bool,
 ) -> (Rect, Option<u16>, Rect) {
     let content = Rect::new(area.x, area.y, area.width.saturating_sub(1), area.height);
     if content.is_empty() {
         return (Rect::default(), None, Rect::default());
+    }
+    if !agents_enabled {
+        let workspace_area = Rect {
+            height: content.height.saturating_sub(1),
+            ..content
+        };
+        return (workspace_area, None, Rect::default());
     }
     if content.height < 7 {
         return (content, None, Rect::default());
@@ -34,7 +42,8 @@ pub(crate) fn render_collapsed_sidebar(
 ) {
     let palette = &config.palette;
     render_sidebar_background(buffer, area, palette);
-    let (workspace_area, divider_y, detail_area) = collapsed_sidebar_sections(area);
+    let (workspace_area, divider_y, detail_area) =
+        collapsed_sidebar_sections(area, config.agents.enabled);
     for (index, workspace) in snapshot
         .workspaces
         .iter()
@@ -195,10 +204,16 @@ pub(crate) fn render_sidebar(
     } else {
         Rect::new(area.right().saturating_sub(1), area.y, 1, area.height)
     };
-    let (workspace_area, detail_area) =
-        crate::ui::expanded_sidebar_sections(area, state.sidebar_section_split);
-    hits.sidebar_section_divider =
-        crate::ui::sidebar_section_divider_rect(area, state.sidebar_section_split);
+    let (workspace_area, detail_area) = crate::ui::expanded_sidebar_sections(
+        area,
+        state.sidebar_section_split,
+        config.agents.enabled,
+    );
+    hits.sidebar_section_divider = crate::ui::sidebar_section_divider_rect(
+        area,
+        state.sidebar_section_split,
+        config.agents.enabled,
+    );
     put_text(
         buffer,
         workspace_area.x,
@@ -367,6 +382,13 @@ pub(crate) fn render_sidebar(
 
     let footer_y = workspace_area.bottom().saturating_sub(1);
     if config.mouse_capture {
+        // With no Agents panel, this footer also holds the collapse button and its gap.
+        let workspace_area = Rect {
+            width: workspace_area
+                .width
+                .saturating_sub(if config.agents.enabled { 0 } else { 2 }),
+            ..workspace_area
+        };
         hits.new_workspace = Rect::new(
             workspace_area.x,
             footer_y,

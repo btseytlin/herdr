@@ -348,6 +348,17 @@ status_indicators = "symbols"
 
 The symbols are static, so this option does not enable spinner animation.
 
+### Hide the Agents panel
+
+To keep only Spaces in the desktop sidebar, open Settings with `ctrl+b`, release, then `s`. Select the agents panel section, choose hidden, and apply. The choice is saved immediately without restarting the server or stopping agents.
+
+```toml
+[ui.sidebar.agents]
+enabled = false
+```
+
+The default is `true`. Hiding the panel gives its height to Spaces in both expanded and compact sidebars. Agent processes, space status indicators, notifications, and the mobile switcher remain unchanged. Config file edits take effect when the client reloads config.
+
 ### Sidebar row layouts
 
 The expanded desktop sidebar renders each inner array in `rows` as one line. These are the complete default layouts:

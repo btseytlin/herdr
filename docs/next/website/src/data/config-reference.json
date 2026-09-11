@@ -1049,6 +1049,12 @@
           ]
         },
         {
+          "key": "ui.sidebar.agents.enabled",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the Agents panel in expanded and compact desktop sidebars. False gives its height to Spaces. Does not change running agents, notifications, or the mobile switcher. Applies immediately from Settings or on client config reload."
+        },
+        {
           "key": "ui.sidebar.agents.row_gap",
           "type": "integer",
           "default": "0",

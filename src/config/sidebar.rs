@@ -422,6 +422,7 @@ where
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AgentsSidebarConfig {
+    pub enabled: bool,
     #[serde(deserialize_with = "deserialize_sidebar_rows")]
     pub rows: AgentSidebarRows,
     #[serde(default, deserialize_with = "deserialize_rows_by_agent")]
@@ -440,6 +441,7 @@ impl AgentsSidebarConfig {
 impl Default for AgentsSidebarConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             rows: vec![
                 vec![
                     AgentSidebarToken::StateIcon,
@@ -485,6 +487,31 @@ pub struct SidebarConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agents_panel_visibility_defaults_visible_and_round_trips() {
+        for (input, enabled) in [
+            ("", true),
+            ("enabled = true", true),
+            ("enabled = false", false),
+        ] {
+            let config: AgentsSidebarConfig = toml::from_str(input).expect("panel config");
+            let saved = serde_json::to_value(&config).unwrap();
+            assert_eq!(saved["enabled"].as_bool(), Some(enabled));
+            let encoded = toml::to_string(&config).unwrap();
+            assert_eq!(
+                toml::from_str::<AgentsSidebarConfig>(&encoded).unwrap(),
+                config
+            );
+        }
+    }
+
+    #[test]
+    fn agents_panel_visibility_rejects_non_boolean_values() {
+        for value in ["'false'", "0", "[]"] {
+            assert!(toml::from_str::<AgentsSidebarConfig>(&format!("enabled = {value}")).is_err());
+        }
+    }
 
     #[test]
     fn defaults_match_the_compact_agent_and_existing_space_layouts() {

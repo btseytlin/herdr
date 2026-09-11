@@ -440,6 +440,7 @@ pub(super) struct ClientGlobalMenuOverlay {
 pub(super) enum ClientSettingsSection {
     Theme,
     Indicators,
+    AgentsPanel,
     Sound,
     Toast,
     Integrations,
@@ -449,6 +450,7 @@ impl ClientSettingsSection {
     pub(super) const ALL: &[Self] = &[
         Self::Theme,
         Self::Indicators,
+        Self::AgentsPanel,
         Self::Sound,
         Self::Toast,
         Self::Integrations,
@@ -458,6 +460,7 @@ impl ClientSettingsSection {
         match self {
             Self::Theme => "theme",
             Self::Indicators => "indicators",
+            Self::AgentsPanel => "agents panel",
             Self::Sound => "sound",
             Self::Toast => "toasts",
             Self::Integrations => "integrations",

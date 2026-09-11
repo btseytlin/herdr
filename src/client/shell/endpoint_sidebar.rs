@@ -10,7 +10,8 @@ pub(super) fn render_collapsed(
 ) {
     let palette = &config.palette;
     super::render::render_sidebar_background(buffer, area, palette);
-    let (workspace_area, divider_y, detail_area) = super::sidebar::collapsed_sidebar_sections(area);
+    let (workspace_area, divider_y, detail_area) =
+        super::sidebar::collapsed_sidebar_sections(area, config.agents.enabled);
     let mut y = workspace_area.y;
     for (index, endpoint) in state.endpoints.iter().enumerate() {
         if y >= workspace_area.bottom() {
@@ -163,10 +164,16 @@ pub(super) fn render_expanded(
     } else {
         Rect::new(area.right().saturating_sub(1), area.y, 1, area.height)
     };
-    let (workspace_area, detail_area) =
-        crate::ui::expanded_sidebar_sections(area, state.sidebar_section_split);
-    hits.sidebar_section_divider =
-        crate::ui::sidebar_section_divider_rect(area, state.sidebar_section_split);
+    let (workspace_area, detail_area) = crate::ui::expanded_sidebar_sections(
+        area,
+        state.sidebar_section_split,
+        config.agents.enabled,
+    );
+    hits.sidebar_section_divider = crate::ui::sidebar_section_divider_rect(
+        area,
+        state.sidebar_section_split,
+        config.agents.enabled,
+    );
     put_text(
         buffer,
         workspace_area.x,
@@ -338,6 +345,13 @@ pub(super) fn render_expanded(
 
     let footer_y = workspace_area.bottom().saturating_sub(1);
     if config.mouse_capture {
+        // With no Agents panel, this footer also holds the collapse button and its gap.
+        let workspace_area = Rect {
+            width: workspace_area
+                .width
+                .saturating_sub(if config.agents.enabled { 0 } else { 2 }),
+            ..workspace_area
+        };
         let label = format!(" new · {}", active_endpoint_label(state));
         hits.new_workspace = Rect::new(
             workspace_area.x,
