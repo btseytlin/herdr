@@ -138,6 +138,7 @@ pub(crate) fn render_tab_bar(
             marker,
             style
                 .fg(status_color(tab.agent_status, palette))
+                .bg(palette.surface0)
                 .remove_modifier(Modifier::DIM),
         );
         first_marker_x.get_or_insert(marker_x);

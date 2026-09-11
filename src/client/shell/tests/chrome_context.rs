@@ -32,8 +32,9 @@ fn tab_status_markers_follow_live_status_style_focus_and_zoom() {
                     assert_eq!(marker.symbol(), icon);
                     assert_eq!(marker.fg, status_color(status, &state.config.palette));
                     assert!(!marker.modifier.contains(Modifier::DIM));
+                    assert_eq!(marker.bg, state.config.palette.surface0);
                     assert_eq!(
-                        marker.bg,
+                        restored.cell((rect.x + 4, rect.y)).unwrap().bg,
                         if focused {
                             state.config.palette.accent
                         } else {
