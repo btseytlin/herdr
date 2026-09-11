@@ -52,6 +52,7 @@ impl ClientShellState {
                 reveal_focused_tab: &mut self.reveal_focused_tab,
                 sidebar_collapsed: false,
                 sidebar_section_split: self.sidebar_section_split,
+                tab_section_split: self.tab_section_split,
                 tab_drag_insert_index: None,
                 selected_workspace_id: self.navigate_workspace_id.as_deref(),
                 dragged_workspace_id: None,
@@ -99,6 +100,9 @@ impl ClientShellState {
     }
 
     pub(crate) fn compose(&mut self, cols: u16, rows: u16) -> Option<FrameData> {
+        if self.config.vertical_tabs && self.last_composed_size != Some((cols, rows)) {
+            self.reveal_focused_tab = true;
+        }
         self.last_composed_size = Some((cols, rows));
         if self.snapshot.is_none() || self.pane_surface.is_none() {
             return Some(self.compose_unavailable(cols, rows));
@@ -150,6 +154,7 @@ impl ClientShellState {
                 reveal_focused_tab: &mut self.reveal_focused_tab,
                 sidebar_collapsed: self.sidebar_collapsed,
                 sidebar_section_split: self.sidebar_section_split,
+                tab_section_split: self.tab_section_split,
                 tab_drag_insert_index,
                 selected_workspace_id: (self.mode == ClientShellMode::Navigate)
                     .then_some(self.navigate_workspace_id.as_deref())
@@ -255,7 +260,7 @@ impl ClientShellState {
                 &self.config.palette,
             )
         };
-        if mode_bar == Some(layout.tab_bar) {
+        if mode_bar == Some(layout.tab_bar) && self.hits.vertical_tabs_area.is_empty() {
             self.hits.tabs.clear();
             self.hits.new_tab = Rect::default();
             self.hits.tab_scroll_left = Rect::default();

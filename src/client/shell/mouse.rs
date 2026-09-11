@@ -30,8 +30,20 @@ impl ClientShellState {
         if (self.sidebar_section_split - ratio).abs() > f32::EPSILON {
             self.sidebar_section_split = ratio;
             self.sidebar_section_split_manual = true;
+            self.reveal_focused_tab = true;
             outcome.repaint = true;
         }
+    }
+
+    fn set_tab_section_from_row(&mut self, row: u16, outcome: &mut ClientShellInput) {
+        let area = self.hits.tab_section_area;
+        if area.height == 0 {
+            return;
+        }
+        let ratio = (row.saturating_sub(area.y) as f32 / area.height as f32).clamp(0.1, 0.9);
+        self.tab_section_split = Some(ratio);
+        self.reveal_focused_tab = true;
+        outcome.repaint = true;
     }
 
     fn pane_scrollbar_offset(
@@ -424,6 +436,17 @@ impl ClientShellState {
             .collect::<Vec<_>>();
         let (first_index, first_rect) = *visible.first()?;
         let (last_index, last_rect) = *visible.last()?;
+        if !self.hits.vertical_tabs_area.is_empty() {
+            if !super::contains(self.hits.vertical_tabs_area, point) {
+                return None;
+            }
+            for (index, rect) in &visible {
+                if point.1 <= rect.y {
+                    return Some(*index);
+                }
+            }
+            return Some(last_index + 1);
+        }
         let on_tab_row = point.1 == first_rect.y;
         if !on_tab_row {
             return None;
@@ -939,6 +962,23 @@ impl ClientShellState {
                     self.set_sidebar_section_from_row(mouse.row, outcome);
                     return;
                 }
+                Some(ClientChromeDrag::TabSection) => {
+                    self.set_tab_section_from_row(mouse.row, outcome);
+                    return;
+                }
+                Some(ClientChromeDrag::TabScrollbar { grab_row_offset }) => {
+                    if let Some(metrics) = self.hits.tab_scroll_metrics {
+                        let offset = crate::ui::scrollbar_offset_from_drag_row(
+                            metrics,
+                            self.hits.tab_scrollbar,
+                            mouse.row,
+                            *grab_row_offset,
+                        );
+                        self.tab_scroll = metrics.max_offset_from_bottom.saturating_sub(offset);
+                        outcome.repaint = true;
+                    }
+                    return;
+                }
                 Some(ClientChromeDrag::WorkspaceScrollbar { grab_row_offset }) => {
                     if let Some(metrics) = self.hits.workspace_scroll_metrics {
                         let offset = crate::ui::scrollbar_offset_from_drag_row(
@@ -1250,10 +1290,13 @@ impl ClientShellState {
                             );
                         }
                     }
-                    ClientChromeDrag::SidebarWidth | ClientChromeDrag::SidebarSection => {
+                    ClientChromeDrag::SidebarWidth
+                    | ClientChromeDrag::SidebarSection
+                    | ClientChromeDrag::TabSection => {
                         self.persist_chrome_preferences(outcome);
                     }
                     ClientChromeDrag::WorkspaceScrollbar { .. }
+                    | ClientChromeDrag::TabScrollbar { .. }
                     | ClientChromeDrag::AgentScrollbar { .. }
                     | ClientChromeDrag::HelpScrollbar { .. }
                     | ClientChromeDrag::ProductAnnouncementScrollbar { .. }
@@ -1747,6 +1790,18 @@ impl ClientShellState {
                     outcome.repaint = true;
                 }
             }
+            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
+                if super::contains(self.hits.vertical_tabs_area, point) =>
+            {
+                self.tab_scroll = if mouse.kind == MouseEventKind::ScrollUp {
+                    self.tab_scroll.saturating_sub(1)
+                } else {
+                    self.tab_scroll
+                        .saturating_add(1)
+                        .min(self.hits.tab_max_scroll)
+                };
+                outcome.repaint = true;
+            }
             MouseEventKind::ScrollUp
                 if self
                     .hits
@@ -1845,6 +1900,32 @@ impl ClientShellState {
                 if super::contains(self.hits.sidebar_section_divider, point) {
                     self.chrome_drag = Some(ClientChromeDrag::SidebarSection);
                     self.set_sidebar_section_from_row(mouse.row, outcome);
+                    return;
+                }
+                if super::contains(self.hits.tab_section_divider, point) {
+                    self.chrome_drag = Some(ClientChromeDrag::TabSection);
+                    self.set_tab_section_from_row(mouse.row, outcome);
+                    return;
+                }
+                if super::contains(self.hits.tab_scrollbar, point) {
+                    if let Some(metrics) = self.hits.tab_scroll_metrics {
+                        if let Some(grab_row_offset) = crate::ui::scrollbar_thumb_grab_offset(
+                            metrics,
+                            self.hits.tab_scrollbar,
+                            mouse.row,
+                        ) {
+                            self.chrome_drag =
+                                Some(ClientChromeDrag::TabScrollbar { grab_row_offset });
+                        } else {
+                            let offset = crate::ui::scrollbar_offset_from_row(
+                                metrics,
+                                self.hits.tab_scrollbar,
+                                mouse.row,
+                            );
+                            self.tab_scroll = metrics.max_offset_from_bottom.saturating_sub(offset);
+                            outcome.repaint = true;
+                        }
+                    }
                     return;
                 }
                 if super::contains(self.hits.workspace_scrollbar, point) {

@@ -50,6 +50,7 @@ impl ClientShellState {
             ClientSettingsSection::Theme => theme_index(&self.config.theme_name),
             ClientSettingsSection::Indicators => indicator_index(self.config.status_indicators),
             ClientSettingsSection::AgentsPanel => usize::from(!self.config.agents.enabled),
+            ClientSettingsSection::VerticalTabs => usize::from(!self.config.vertical_tabs),
             ClientSettingsSection::Sound => usize::from(!self.config.sound_enabled),
             ClientSettingsSection::Toast => toast_index(self.config.toast_delivery),
             ClientSettingsSection::Integrations => 0,
@@ -100,6 +101,7 @@ impl ClientShellState {
                 ClientSettingsSection::Theme => crate::config::THEME_NAMES.len(),
                 ClientSettingsSection::Indicators
                 | ClientSettingsSection::AgentsPanel
+                | ClientSettingsSection::VerticalTabs
                 | ClientSettingsSection::Sound => 2,
                 ClientSettingsSection::Toast => 4,
                 ClientSettingsSection::Integrations => settings.integrations.len(),
@@ -219,6 +221,25 @@ impl ClientShellState {
                     |content| edit.apply(content),
                 ) {
                     Ok(()) => self.config.agents.enabled = enabled,
+                    Err(error) => self.endpoint_error = Some(error),
+                }
+                outcome.repaint = true;
+            }
+            ClientSettingsSection::VerticalTabs => {
+                let enabled = selected == 0;
+                let edit = crate::config::ConfigEdit::VerticalTabs(enabled);
+                match crate::config::update_file_at(
+                    &self.config.local_config_path,
+                    edit.description(),
+                    |content| edit.apply(content),
+                ) {
+                    Ok(()) => {
+                        self.config.vertical_tabs = enabled;
+                        self.tab_scroll = 0;
+                        self.reveal_focused_tab = true;
+                        self.chrome_drag = None;
+                        self.tab_press = None;
+                    }
                     Err(error) => self.endpoint_error = Some(error),
                 }
                 outcome.repaint = true;

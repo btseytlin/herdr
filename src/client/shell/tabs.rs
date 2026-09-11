@@ -102,23 +102,7 @@ pub(crate) fn render_tab_bar(
             break;
         }
         let rect = Rect::new(x, area.y, width, 1);
-        let style = if tab.focused {
-            let base = Style::default()
-                .fg(panel_contrast_fg(palette))
-                .bg(palette.accent);
-            if tab.custom_label {
-                base.add_modifier(Modifier::BOLD)
-            } else {
-                base
-            }
-        } else if tab.custom_label {
-            Style::default().fg(palette.overlay1).bg(palette.surface0)
-        } else {
-            Style::default()
-                .fg(palette.overlay0)
-                .bg(palette.surface0)
-                .add_modifier(Modifier::DIM)
-        };
+        let style = tab_style(tab, palette);
         let padding = width.saturating_sub(display_width(&name));
         let left = (padding / 2).max(u16::from(index == *tab_scroll && index > 0 && width > 1));
         let text = format!(
@@ -278,7 +262,7 @@ fn tab_bar_content_area(snapshot: &ClientShellSnapshot, area: Rect) -> Rect {
     }
 }
 
-fn render_tab_bar_status(
+pub(super) fn render_tab_bar_status(
     buffer: &mut Buffer,
     area: Rect,
     snapshot: &ClientShellSnapshot,
@@ -398,7 +382,30 @@ fn last_visible_tab(start: usize, widths: &[u16], available: u16) -> Option<usiz
     last
 }
 
-fn tab_label(tab: &ClientShellTab, indicator: crate::config::StatusIndicatorStyle) -> String {
+pub(in crate::client::shell) fn tab_style(tab: &ClientShellTab, palette: &Palette) -> Style {
+    if tab.focused {
+        let base = Style::default()
+            .fg(panel_contrast_fg(palette))
+            .bg(palette.accent);
+        if tab.custom_label {
+            base.add_modifier(Modifier::BOLD)
+        } else {
+            base
+        }
+    } else if tab.custom_label {
+        Style::default().fg(palette.overlay1).bg(palette.surface0)
+    } else {
+        Style::default()
+            .fg(palette.overlay0)
+            .bg(palette.surface0)
+            .add_modifier(Modifier::DIM)
+    }
+}
+
+pub(in crate::client::shell) fn tab_label(
+    tab: &ClientShellTab,
+    indicator: crate::config::StatusIndicatorStyle,
+) -> String {
     let zoom = if tab.zoomed { " Z" } else { "" };
     format!(
         "{} {}{zoom}",

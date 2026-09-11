@@ -77,6 +77,7 @@ pub(crate) struct ClientShellConfig {
     pub(super) mobile_width_threshold: u16,
     pub(super) tab_bar_position: TabBarPositionConfig,
     pub(super) hide_tab_bar_when_single_tab: bool,
+    pub(super) vertical_tabs: bool,
     pub(super) spaces: SpacesSidebarConfig,
     pub(super) agents: crate::config::AgentsSidebarConfig,
     pub(super) agent_panel_sort: crate::config::AgentPanelSortConfig,
@@ -146,6 +147,13 @@ pub(super) struct ShellHitMap {
     pub(super) workspace_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(super) workspace_max_scroll: usize,
     pub(super) tabs: Vec<(Rect, String)>,
+    pub(super) vertical_tabs_area: Rect,
+    pub(super) tab_section_area: Rect,
+    pub(super) tab_section_divider: Rect,
+    pub(super) tab_body: Rect,
+    pub(super) tab_scrollbar: Rect,
+    pub(super) tab_scroll_metrics: Option<crate::pane::ScrollMetrics>,
+    pub(super) tab_max_scroll: usize,
     pub(super) panes: Vec<PaneHit>,
     pub(super) popup: Option<PaneHit>,
     pub(super) pane_splits: Vec<PaneSplitHit>,
@@ -243,6 +251,10 @@ pub(super) struct ClientTabPress {
 pub(super) enum ClientChromeDrag {
     SidebarWidth,
     SidebarSection,
+    TabSection,
+    TabScrollbar {
+        grab_row_offset: u16,
+    },
     WorkspaceScrollbar {
         grab_row_offset: u16,
     },
@@ -441,6 +453,7 @@ pub(super) enum ClientSettingsSection {
     Theme,
     Indicators,
     AgentsPanel,
+    VerticalTabs,
     Sound,
     Toast,
     Integrations,
@@ -454,6 +467,7 @@ impl ClientSettingsSection {
         Self::Sound,
         Self::Toast,
         Self::Integrations,
+        Self::VerticalTabs,
     ];
 
     pub(super) fn label(self) -> &'static str {
@@ -461,6 +475,7 @@ impl ClientSettingsSection {
             Self::Theme => "theme",
             Self::Indicators => "indicators",
             Self::AgentsPanel => "agents panel",
+            Self::VerticalTabs => "vertical tabs",
             Self::Sound => "sound",
             Self::Toast => "toasts",
             Self::Integrations => "integrations",
@@ -908,6 +923,7 @@ pub(crate) struct ClientShellState {
     pub(super) sidebar_width_manual: bool,
     pub(super) sidebar_section_split: f32,
     pub(super) sidebar_section_split_manual: bool,
+    pub(super) tab_section_split: Option<f32>,
     pub(super) agent_panel_sort_manual: bool,
     pub(super) last_sidebar_divider_click: Option<std::time::Instant>,
     pub(super) chrome_drag: Option<ClientChromeDrag>,
@@ -1050,6 +1066,10 @@ impl ClientShellState {
             sidebar_width_manual: preferences.sidebar_width.is_some(),
             sidebar_section_split,
             sidebar_section_split_manual: preferences.sidebar_section_split.is_some(),
+            tab_section_split: preferences
+                .tab_section_split
+                .filter(|split| split.is_finite())
+                .map(|split| split.clamp(0.1, 0.9)),
             agent_panel_sort_manual: preferences.agent_panel_sort.is_some(),
             last_sidebar_divider_click: None,
             chrome_drag: None,

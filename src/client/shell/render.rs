@@ -11,7 +11,7 @@ pub(super) use super::agent_sidebar::{ordered_agent_pane_ids, render_agent_panel
 pub(super) use super::aggregate_navigation::navigator_rows as client_navigator_rows;
 pub(super) use overlays::{render_client_overlay, render_context_menu, render_global_menu};
 pub(super) use sidebar::{render_collapsed_sidebar, render_sidebar, workspace_entries};
-pub(super) use tabs::{render_tab_bar, tab_bar_status_width};
+pub(super) use tabs::{render_tab_bar, tab_bar_status_width, tab_label, tab_style};
 
 pub(in crate::client::shell) fn render_sidebar_background(
     buffer: &mut Buffer,
@@ -222,6 +222,7 @@ pub(super) struct ShellRenderState<'a> {
     pub(super) reveal_focused_tab: &'a mut bool,
     pub(super) sidebar_collapsed: bool,
     pub(super) sidebar_section_split: f32,
+    pub(super) tab_section_split: Option<f32>,
     pub(super) tab_drag_insert_index: Option<usize>,
     pub(super) selected_workspace_id: Option<&'a str>,
     pub(super) dragged_workspace_id: Option<&'a str>,
@@ -285,7 +286,13 @@ pub(super) fn render_shell(
             );
         }
     }
-    if layout.tab_bar.height > 0 {
+    if !hits.vertical_tabs_area.is_empty() {
+        super::vertical_tabs::render(buffer, snapshot, config, &mut state, &mut hits);
+        if !layout.tab_bar.is_empty() {
+            buffer.set_style(layout.tab_bar, Style::default().bg(config.palette.panel_bg));
+            tabs::render_tab_bar_status(buffer, layout.tab_bar, snapshot, &config.palette);
+        }
+    } else if layout.tab_bar.height > 0 {
         render_tab_bar(
             buffer,
             layout.tab_bar,
@@ -300,6 +307,8 @@ pub(super) fn render_shell(
     if !config.mouse_capture {
         hits.sidebar_divider = Rect::default();
         hits.sidebar_section_divider = Rect::default();
+        hits.tab_section_divider = Rect::default();
+        hits.tab_scrollbar = Rect::default();
         hits.workspace_scrollbar = Rect::default();
         hits.agent_scrollbar = Rect::default();
         hits.agent_sort_toggle = Rect::default();

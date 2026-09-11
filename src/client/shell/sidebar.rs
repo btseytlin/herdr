@@ -209,6 +209,13 @@ pub(crate) fn render_sidebar(
         state.sidebar_section_split,
         config.agents.enabled,
     );
+    let workspace_area = super::super::vertical_tabs::reserve_section(
+        workspace_area,
+        Some(snapshot),
+        config,
+        state,
+        hits,
+    );
     hits.sidebar_section_divider = crate::ui::sidebar_section_divider_rect(
         area,
         state.sidebar_section_split,

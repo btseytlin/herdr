@@ -3,6 +3,7 @@ pub(crate) enum ConfigEdit<'a> {
     Theme(&'a str),
     StatusIndicators(super::StatusIndicatorStyle),
     AgentsPanel(bool),
+    VerticalTabs(bool),
     Sound(bool),
     ToastDelivery(super::ToastDelivery),
 }
@@ -13,6 +14,7 @@ impl ConfigEdit<'_> {
             Self::Theme(_) => "theme",
             Self::StatusIndicators(_) => "status indicators",
             Self::AgentsPanel(_) => "agents panel setting",
+            Self::VerticalTabs(_) => "vertical tabs setting",
             Self::Sound(_) => "sound setting",
             Self::ToastDelivery(_) => "toast setting",
         }
@@ -33,6 +35,9 @@ impl ConfigEdit<'_> {
             ),
             Self::AgentsPanel(enabled) => {
                 super::upsert_section_bool(content, "ui.sidebar.agents", "enabled", enabled)
+            }
+            Self::VerticalTabs(enabled) => {
+                super::upsert_section_bool(content, "ui", "vertical_tabs", enabled)
             }
             Self::Sound(enabled) => {
                 super::upsert_section_bool(content, "ui.sound", "enabled", enabled)

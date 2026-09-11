@@ -71,6 +71,7 @@ pub(super) fn render_settings_overlay(
             .iter()
             .any(|integration| integration.state == crate::api::schema::IntegrationState::Outdated);
     let mut tab_x = inner.x;
+    let mut tab_y = inner.y + 1;
     let mut tab_hits = Vec::new();
     for section in ClientSettingsSection::ALL {
         let badge = *section == ClientSettingsSection::Integrations && integration_badge;
@@ -79,8 +80,12 @@ pub(super) fn render_settings_overlay(
         } else {
             format!(" {} ", section.label())
         };
+        if tab_x > inner.x && tab_x.saturating_add(display_width(&label)) > inner.right() {
+            tab_x = inner.x;
+            tab_y += 1;
+        }
         let width = display_width(&label).min(inner.right().saturating_sub(tab_x));
-        let rect = Rect::new(tab_x, inner.y + 1, width, 1);
+        let rect = Rect::new(tab_x, tab_y, width, 1);
         let active = *section == settings.section;
         let style = if active {
             Style::default()
@@ -107,14 +112,11 @@ pub(super) fn render_settings_overlay(
         }
         tab_hits.push((rect, *section));
         tab_x = tab_x.saturating_add(width.saturating_add(1));
-        if tab_x >= inner.right() {
-            break;
-        }
     }
     put_text(
         buffer,
         inner.x,
-        inner.y + 2,
+        tab_y + 1,
         inner.width,
         &"─".repeat(inner.width as usize),
         Style::default().fg(palette.surface0).bg(palette.panel_bg),
@@ -122,9 +124,9 @@ pub(super) fn render_settings_overlay(
 
     let content = Rect::new(
         inner.x,
-        inner.y + 4,
+        tab_y + 3,
         inner.width,
-        inner.height.saturating_sub(7),
+        inner.bottom().saturating_sub(tab_y + 6),
     );
     let mut choice_hits = Vec::new();
     match settings.section {
@@ -177,6 +179,18 @@ pub(super) fn render_settings_overlay(
                 "agents panel",
                 "hide the global agent list to give its space to Spaces",
                 &["visible", "hidden"],
+                settings.selected,
+                palette,
+                &mut choice_hits,
+            );
+        }
+        ClientSettingsSection::VerticalTabs => {
+            render_choice_section(
+                buffer,
+                content,
+                "vertical tabs",
+                "show a separate Tabs section below Spaces",
+                &["enabled", "disabled"],
                 settings.selected,
                 palette,
                 &mut choice_hits,
