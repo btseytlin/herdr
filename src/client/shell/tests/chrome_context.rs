@@ -1,6 +1,115 @@
 use super::*;
 
 #[test]
+fn tab_status_markers_follow_live_status_style_focus_and_zoom() {
+    use crate::config::StatusIndicatorStyle::{Dots, Symbols};
+
+    for indicator in [Dots, Symbols] {
+        let mut config = ClientShellConfig::from_config(&Config::default());
+        config.status_indicators = indicator;
+        let mut state = ClientShellState::new(config);
+        for (status, dots, symbols) in [
+            (AgentStatus::Working, "●", "◐"),
+            (AgentStatus::Blocked, "●", "×"),
+            (AgentStatus::Done, "●", "✓"),
+            (AgentStatus::Idle, "○", "○"),
+            (AgentStatus::Unknown, "·", "·"),
+        ] {
+            for focused in [false, true] {
+                for zoomed in [false, true] {
+                    let mut projected = snapshot();
+                    projected.tabs[0].label = "build".into();
+                    projected.tabs[0].agent_status = status;
+                    projected.tabs[0].focused = focused;
+                    projected.tabs[0].zoomed = zoomed;
+                    state.set_snapshot(Box::new(projected));
+                    state.set_pane_surface(surface());
+                    let frame = state.compose(106, 20).expect("tab frame");
+                    let (rect, tab_id) = &state.hits.tabs[0];
+                    let restored = frame.to_ratatui_buffer().unwrap();
+                    let marker = restored.cell((rect.x + 2, rect.y)).unwrap();
+                    let icon = if indicator == Dots { dots } else { symbols };
+                    assert_eq!(marker.symbol(), icon);
+                    assert_eq!(marker.fg, status_color(status, &state.config.palette));
+                    assert!(!marker.modifier.contains(Modifier::DIM));
+                    assert_eq!(
+                        marker.bg,
+                        if focused {
+                            state.config.palette.accent
+                        } else {
+                            state.config.palette.surface0
+                        }
+                    );
+                    let text = (rect.x..rect.right())
+                        .map(|x| restored.cell((x, rect.y)).unwrap().symbol())
+                        .collect::<String>();
+                    assert_eq!(
+                        text,
+                        format!("  {icon} build{}  ", if zoomed { " Z" } else { "" })
+                    );
+                    assert_eq!(tab_id, "tab_1");
+                    assert_eq!(state.snapshot.as_ref().unwrap().tabs[0].label, "build");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn tab_status_markers_survive_narrow_overflow_and_stay_inside_hit_rects() {
+    let mut projected = snapshot();
+    let template = projected.tabs[0].clone();
+    projected.tabs = ["long first label", "long second label", "last"]
+        .into_iter()
+        .enumerate()
+        .map(|(index, label)| ClientShellTab {
+            tab_id: format!("tab_{}", index + 1),
+            label: label.into(),
+            focused: index == 0,
+            agent_status: AgentStatus::Working,
+            ..template.clone()
+        })
+        .collect();
+    for mouse_capture in [false, true] {
+        let mut config = ClientShellConfig::from_config(&Config::default());
+        config.mouse_capture = mouse_capture;
+        config.status_indicators = crate::config::StatusIndicatorStyle::Symbols;
+        // Cover one-cell clipping through a strip wide enough for all three tabs.
+        for width in 1..=64 {
+            for requested_scroll in [0, 1, usize::MAX] {
+                let area = Rect::new(0, 0, width, 1);
+                let mut buffer = Buffer::empty(area);
+                let mut hits = ShellHitMap::default();
+                let mut scroll = requested_scroll;
+                render::render_tab_bar(
+                    &mut buffer,
+                    area,
+                    &projected,
+                    &config,
+                    &mut scroll,
+                    &mut false,
+                    None,
+                    &mut hits,
+                );
+                for (rect, _) in &hits.tabs {
+                    assert!(rect.right() <= width);
+                    if hits.tab_scroll_right.width > 0 {
+                        assert!(rect.right() <= hits.tab_scroll_right.x);
+                    }
+                    let marker = (rect.x..rect.right())
+                        .filter_map(|x| buffer.cell((x, 0)))
+                        .find(|cell| cell.symbol() == "◐")
+                        .unwrap_or_else(|| {
+                            panic!("missing marker: width={width}, scroll={scroll}, rect={rect:?}")
+                        });
+                    assert_eq!(marker.fg, config.palette.yellow);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn tab_overflow_controls_scroll_the_client_owned_tab_bar() {
     let mut snapshot = snapshot();
     snapshot.tabs.extend((2..=8).map(|number| ClientShellTab {

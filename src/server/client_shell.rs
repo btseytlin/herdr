@@ -544,6 +544,72 @@ mod tests {
     use super::*;
 
     #[test]
+    fn snapshot_tab_status_uses_multi_pane_attention_priority() {
+        use crate::api::schema::AgentStatus;
+        use crate::detect::AgentState;
+
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = crate::app::App::new(
+            &crate::config::Config::default(),
+            crate::app::AppPolicy::TEST,
+            None,
+            api_rx,
+            crate::api::EventHub::default(),
+        );
+        let mut workspace = crate::workspace::Workspace::test_new("status");
+        let first = workspace.tabs[0].root_pane;
+        let second = workspace.test_split(ratatui::layout::Direction::Horizontal);
+        let first_terminal = workspace.terminal_id(first).unwrap().clone();
+        let second_terminal = workspace.terminal_id(second).unwrap().clone();
+        app.state.workspaces = vec![workspace];
+        app.state.active = Some(0);
+        app.state.ensure_test_terminals();
+        for (first_state, second_state, second_seen, expected) in [
+            (
+                AgentState::Working,
+                AgentState::Blocked,
+                true,
+                AgentStatus::Blocked,
+            ),
+            (
+                AgentState::Working,
+                AgentState::Idle,
+                false,
+                AgentStatus::Done,
+            ),
+            (
+                AgentState::Working,
+                AgentState::Unknown,
+                true,
+                AgentStatus::Working,
+            ),
+            (
+                AgentState::Idle,
+                AgentState::Unknown,
+                true,
+                AgentStatus::Idle,
+            ),
+            (
+                AgentState::Unknown,
+                AgentState::Unknown,
+                true,
+                AgentStatus::Unknown,
+            ),
+        ] {
+            app.state.terminals.get_mut(&first_terminal).unwrap().state = first_state;
+            app.state.terminals.get_mut(&second_terminal).unwrap().state = second_state;
+            app.state.workspaces[0].tabs[0]
+                .panes
+                .get_mut(&second)
+                .unwrap()
+                .seen = second_seen;
+            let projected = snapshot(&app, "boot", 1, None, None);
+            assert_eq!(projected.tabs.len(), 1);
+            assert_eq!(projected.tabs[0].agent_status, expected);
+        }
+    }
+
+    #[test]
     fn snapshot_projects_cached_release_and_update_facts() {
         let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut app = crate::app::App::new(

@@ -24,7 +24,7 @@ pub(crate) fn render_tab_bar(
     let desired_widths = tabs
         .iter()
         .map(|tab| {
-            let label = tab_label(tab);
+            let label = tab_label(tab, config.status_indicators);
             display_width(&label).saturating_add(4).max(MIN_TAB_WIDTH)
         })
         .collect::<Vec<_>>();
@@ -91,8 +91,10 @@ pub(crate) fn render_tab_bar(
 
     let mut first_visible = None;
     let mut last_visible = None;
+    let mut first_marker_x = None;
+    let mut last_marker_x = None;
     for (index, tab) in tabs.iter().enumerate().skip(*tab_scroll) {
-        let name = tab_label(tab);
+        let name = tab_label(tab, config.status_indicators);
         let desired = desired_widths[index];
         let remaining = tab_right.saturating_sub(x);
         let width = desired.min(remaining);
@@ -118,7 +120,7 @@ pub(crate) fn render_tab_bar(
                 .add_modifier(Modifier::DIM)
         };
         let padding = width.saturating_sub(display_width(&name));
-        let left = padding / 2;
+        let left = (padding / 2).max(u16::from(index == *tab_scroll && index > 0 && width > 1));
         let text = format!(
             "{empty:left$}{name}{empty:right_padding$}",
             empty = "",
@@ -126,6 +128,20 @@ pub(crate) fn render_tab_bar(
             right_padding = padding.saturating_sub(left) as usize,
         );
         put_text(buffer, rect.x, rect.y, rect.width, &text, style);
+        let marker_x = rect.x + left;
+        let marker = status_icon(tab.agent_status, config.status_indicators);
+        put_text(
+            buffer,
+            marker_x,
+            rect.y,
+            display_width(marker).min(rect.right() - marker_x),
+            marker,
+            style
+                .fg(status_color(tab.agent_status, palette))
+                .remove_modifier(Modifier::DIM),
+        );
+        first_marker_x.get_or_insert(marker_x);
+        last_marker_x = Some(marker_x);
         hits.tabs.push((rect, tab.tab_id.clone()));
         first_visible.get_or_insert(index);
         last_visible = Some(index);
@@ -190,7 +206,7 @@ pub(crate) fn render_tab_bar(
             buffer,
             ellipsis_x,
             area.y,
-            u16::from(ellipsis_x < content.right()),
+            u16::from(ellipsis_x < content.right() && Some(ellipsis_x) != first_marker_x),
             "…",
             Style::default().fg(palette.overlay0),
         );
@@ -205,7 +221,11 @@ pub(crate) fn render_tab_bar(
             buffer,
             ellipsis_x,
             area.y,
-            u16::from(ellipsis_x >= content.x && ellipsis_x < content.right()),
+            u16::from(
+                ellipsis_x >= content.x
+                    && ellipsis_x < content.right()
+                    && Some(ellipsis_x) != last_marker_x,
+            ),
             "…",
             Style::default().fg(palette.overlay0),
         );
@@ -377,10 +397,11 @@ fn last_visible_tab(start: usize, widths: &[u16], available: u16) -> Option<usiz
     last
 }
 
-fn tab_label(tab: &ClientShellTab) -> String {
-    if tab.zoomed {
-        format!("{} Z", tab.label)
-    } else {
-        tab.label.clone()
-    }
+fn tab_label(tab: &ClientShellTab, indicator: crate::config::StatusIndicatorStyle) -> String {
+    let zoom = if tab.zoomed { " Z" } else { "" };
+    format!(
+        "{} {}{zoom}",
+        status_icon(tab.agent_status, indicator),
+        tab.label
+    )
 }
