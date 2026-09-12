@@ -406,10 +406,17 @@ pub(in crate::client::shell) fn tab_label(
     tab: &ClientShellTab,
     indicator: crate::config::StatusIndicatorStyle,
 ) -> String {
-    let zoom = if tab.zoomed { " Z" } else { "" };
     format!(
-        "{} {}{zoom}",
+        "{} {}",
         status_icon(tab.agent_status, indicator),
-        tab.label
+        tab_title(tab)
     )
+}
+
+pub(in crate::client::shell) fn tab_title(tab: &ClientShellTab) -> std::borrow::Cow<'_, str> {
+    if tab.zoomed {
+        std::borrow::Cow::Owned(format!("{} Z", tab.label))
+    } else {
+        std::borrow::Cow::Borrowed(&tab.label)
+    }
 }

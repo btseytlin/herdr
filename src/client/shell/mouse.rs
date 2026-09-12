@@ -441,7 +441,7 @@ impl ClientShellState {
                 return None;
             }
             for (index, rect) in &visible {
-                if point.1 <= rect.y {
+                if point.1 < rect.y + rect.height.div_ceil(2) {
                     return Some(*index);
                 }
             }

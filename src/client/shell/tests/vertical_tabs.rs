@@ -22,6 +22,123 @@ fn vertical_state(agents: bool, count: usize) -> ClientShellState {
 }
 
 #[test]
+fn vertical_tabs_wrap_titles_at_separators_and_keep_continuations_clickable() {
+    for (label, first_line) in [
+        ("alpha·bravo·charlie", "alpha·bravo·"),
+        ("alpha-bravo-charlie", "alpha-bravo-"),
+        ("alpha bravo charlie", "alpha bravo"),
+    ] {
+        let mut state = vertical_state(false, 2);
+        state.sidebar_width = 17;
+        let mut projected = state.snapshot.as_deref().unwrap().clone();
+        projected.tabs[1].label = label.into();
+        state.set_snapshot(Box::new(projected));
+        let frame = state.compose(106, 40).unwrap();
+        let buffer = frame.to_ratatui_buffer().unwrap();
+        let rect = state.hits.tabs[1].0;
+        assert_eq!(rect.height, 2, "{label}");
+        for (row, expected) in [(rect.y, first_line), (rect.y + 1, "charlie")] {
+            let text = (rect.x + 3..rect.right())
+                .map(|x| buffer.cell((x, row)).unwrap().symbol())
+                .collect::<String>();
+            assert_eq!(text.trim_end(), expected);
+        }
+        assert_eq!(state.snapshot.as_ref().unwrap().tabs[1].label, label);
+        mouse(
+            &mut state,
+            MouseEventKind::Down(MouseButton::Left),
+            rect.x + 3,
+            rect.y + 1,
+        );
+        let click = mouse(
+            &mut state,
+            MouseEventKind::Up(MouseButton::Left),
+            rect.x + 3,
+            rect.y + 1,
+        );
+        assert!(
+            matches!(&click.actions[0], ClientShellAction::Endpoint { request, .. }
+            if matches!(&request.method, crate::api::schema::Method::TabFocus(target) if target.tab_id == "tab_2"))
+        );
+    }
+}
+
+#[test]
+fn vertical_tabs_wrapped_rows_scroll_reveal_and_place_drag_indicators() {
+    let mut state = vertical_state(false, 8);
+    state.sidebar_width = 17;
+    let mut projected = state.snapshot.as_deref().unwrap().clone();
+    for tab in &mut projected.tabs {
+        tab.label = "alpha bravo charlie delta echo".into();
+    }
+    state.set_snapshot(Box::new(projected));
+    state.compose(106, 40).unwrap();
+    assert!(!state.hits.tab_scrollbar.is_empty());
+    assert_eq!(state.hits.tabs[0].0.height, 3);
+    assert_eq!(state.hits.tabs[1].0.y, state.hits.tabs[0].0.bottom());
+    let first = state.hits.tabs[0].0;
+    let second = state.hits.tabs[1].0;
+    mouse(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Left),
+        first.x,
+        first.y,
+    );
+    mouse(
+        &mut state,
+        MouseEventKind::Drag(MouseButton::Left),
+        second.x,
+        second.y + 1,
+    );
+    let frame = state.compose(106, 40).unwrap();
+    let buffer = frame.to_ratatui_buffer().unwrap();
+    assert_eq!(buffer.cell((second.x, second.y)).unwrap().symbol(), "▸");
+    let release = mouse(
+        &mut state,
+        MouseEventKind::Up(MouseButton::Left),
+        second.x,
+        second.y + 1,
+    );
+    assert!(
+        matches!(&release.actions[0], ClientShellAction::Endpoint { request, .. }
+        if matches!(&request.method, crate::api::schema::Method::TabMove(params) if params.tab_id == "tab_1" && params.insert_index == 1))
+    );
+
+    let outcome = mouse(&mut state, MouseEventKind::ScrollDown, first.x, first.y);
+    assert!(outcome.actions.is_empty());
+    state.compose(106, 40).unwrap();
+    assert_eq!(state.hits.tabs[0].1, "tab_2");
+    let mut focused = state.snapshot.as_deref().unwrap().clone();
+    focused.focused_tab_id = Some("tab_8".into());
+    for tab in &mut focused.tabs {
+        tab.focused = tab.tab_id == "tab_8";
+    }
+    state.set_snapshot(Box::new(focused));
+    state.compose(106, 40).unwrap();
+    assert_eq!(state.hits.tabs.last().unwrap().1, "tab_8");
+    assert!(state.hits.tabs.last().unwrap().0.bottom() <= state.hits.tab_body.bottom());
+    state.compose(106, 16).unwrap();
+    assert_eq!(state.hits.tabs.last().unwrap().1, "tab_8");
+    assert!(state.hits.tabs.last().unwrap().0.bottom() <= state.hits.tab_body.bottom());
+}
+
+#[test]
+fn vertical_tabs_oversized_title_stays_inside_its_body() {
+    let mut state = vertical_state(false, 1);
+    state.sidebar_width = 17;
+    state.compose(106, 20).unwrap();
+    let mut projected = state.snapshot.as_deref().unwrap().clone();
+    projected.tabs[0].label =
+        "alpha bravo charlie ".repeat(usize::from(state.hits.tab_body.height));
+    state.set_snapshot(Box::new(projected));
+    state.compose(106, 20).unwrap();
+    assert_eq!(state.hits.tabs[0].0.height, state.hits.tab_body.height);
+    assert_eq!(state.hits.tabs[0].0.bottom(), state.hits.new_tab.y);
+    assert_eq!(state.hits.tab_max_scroll, 0);
+    assert!(state.hits.tab_scrollbar.is_empty());
+}
+
+#[test]
 fn vertical_tabs_render_below_spaces_with_independent_scrolling() {
     for agents in [false, true] {
         let mut state = vertical_state(agents, 20);
