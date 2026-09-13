@@ -22,6 +22,172 @@ fn vertical_state(agents: bool, count: usize) -> ClientShellState {
 }
 
 #[test]
+fn sidebar_creation_buttons_follow_their_section_headings() {
+    for agents in [false, true] {
+        for remote in [false, true] {
+            let mut state = vertical_state(agents, 3);
+            state.config.prompt_new_workspace_name = true;
+            state.config.prompt_new_tab_name = true;
+            if remote {
+                state.set_endpoint_catalog(&[SavedSshEndpoint {
+                    id: crate::client::endpoint::ProfileId::parse(
+                        "0123456789abcdef0123456789abcdef",
+                    )
+                    .unwrap(),
+                    label: "Remote".into(),
+                    target: "dev@build.example".into(),
+                    session: "agents".into(),
+                    enabled: true,
+                }]);
+            }
+            state.compose(106, 40).unwrap();
+            let space = state.hits.new_workspace;
+            let menu = state.hits.global_launcher;
+            let tab = state.hits.new_tab;
+            assert_eq!(space.y, state.layout(106, 40).sidebar.y + 1);
+            assert_eq!(menu.y, space.y);
+            assert!(space.intersection(menu).is_empty());
+            assert_eq!(space.bottom(), state.hits.workspace_body.y);
+            assert_eq!(tab.y, state.hits.vertical_tabs_area.y + 1);
+            assert_eq!(tab.bottom(), state.hits.tab_body.y);
+            assert!(tab.intersection(state.hits.tab_section_divider).is_empty());
+            assert_eq!(
+                state.hits.sidebar_toggle.y,
+                state.layout(106, 40).sidebar.bottom() - 1
+            );
+
+            for row in [
+                state.hits.workspace_body.bottom(),
+                state.hits.vertical_tabs_area.bottom() - 1,
+            ] {
+                let outcome = mouse(
+                    &mut state,
+                    MouseEventKind::Down(MouseButton::Left),
+                    space.x + 1,
+                    row,
+                );
+                assert!(outcome.actions.is_empty());
+                assert!(outcome.requests.is_empty());
+                assert!(state.overlay.is_none());
+                mouse(
+                    &mut state,
+                    MouseEventKind::Up(MouseButton::Left),
+                    space.x + 1,
+                    row,
+                );
+            }
+            mouse(
+                &mut state,
+                MouseEventKind::Down(MouseButton::Left),
+                space.x + 1,
+                space.y,
+            );
+            assert!(matches!(
+                state.overlay,
+                Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+                    target: ClientRenameTarget::NewWorkspace { .. },
+                    ..
+                }))
+            ));
+            state.overlay = None;
+            state.compose(106, 40).unwrap();
+            mouse(
+                &mut state,
+                MouseEventKind::Down(MouseButton::Left),
+                menu.x,
+                menu.y,
+            );
+            assert!(matches!(
+                state.overlay,
+                Some(ClientShellOverlay::GlobalMenu(_))
+            ));
+            state.overlay = None;
+            state.compose(106, 40).unwrap();
+            mouse(
+                &mut state,
+                MouseEventKind::Down(MouseButton::Left),
+                tab.x + 1,
+                tab.y,
+            );
+            assert!(matches!(
+                state.overlay,
+                Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+                    target: ClientRenameTarget::NewTab { .. },
+                    ..
+                }))
+            ));
+            assert!(state.chrome_drag.is_none());
+        }
+    }
+}
+
+#[test]
+fn workspace_drag_stays_below_the_creation_controls() {
+    let mut state = vertical_state(false, 3);
+    let mut projected = state.snapshot.as_deref().unwrap().clone();
+    for index in 2..=3 {
+        projected.workspaces.push(ClientShellWorkspace {
+            workspace_id: format!("ws_{index}"),
+            number: index,
+            focused: false,
+            ..projected.workspaces[0].clone()
+        });
+    }
+    state.set_snapshot(Box::new(projected));
+    for over_controls in [false, true] {
+        state.compose(106, 40).unwrap();
+        let first = state.hits.workspaces[0].rect;
+        let third = state.hits.workspaces[2].rect;
+        let row = if over_controls {
+            state.hits.new_workspace.y
+        } else {
+            first.y
+        };
+        mouse(
+            &mut state,
+            MouseEventKind::Down(MouseButton::Left),
+            third.x + 2,
+            third.y,
+        );
+        mouse(
+            &mut state,
+            MouseEventKind::Drag(MouseButton::Left),
+            first.x + 2,
+            first.y,
+        );
+        mouse(
+            &mut state,
+            MouseEventKind::Drag(MouseButton::Left),
+            first.x + 2,
+            row,
+        );
+        if !over_controls {
+            assert!(
+                matches!(state.chrome_drag.as_ref(), Some(ClientChromeDrag::Workspace {
+                target: Some((_, indicator)), ..
+            }) if *indicator == first.y)
+            );
+        }
+        let outcome = mouse(
+            &mut state,
+            MouseEventKind::Up(MouseButton::Left),
+            first.x + 2,
+            row,
+        );
+        if over_controls {
+            assert!(outcome.actions.is_empty());
+        } else {
+            assert!(
+                matches!(&outcome.actions[0], ClientShellAction::Endpoint { request, .. }
+                if matches!(&request.method, crate::api::schema::Method::WorkspaceMove(params)
+                    if params.workspace_id == "ws_3" && params.insert_index == 0))
+            );
+        }
+        assert!(state.overlay.is_none());
+    }
+}
+
+#[test]
 fn vertical_tabs_wrap_titles_at_separators_and_keep_continuations_clickable() {
     for (label, first_line) in [
         ("alpha·bravo·charlie", "alpha·bravo·"),
@@ -133,7 +299,7 @@ fn vertical_tabs_oversized_title_stays_inside_its_body() {
     state.set_snapshot(Box::new(projected));
     state.compose(106, 20).unwrap();
     assert_eq!(state.hits.tabs[0].0.height, state.hits.tab_body.height);
-    assert_eq!(state.hits.tabs[0].0.bottom(), state.hits.new_tab.y);
+    assert_eq!(state.hits.tabs[0].0.bottom(), state.hits.tab_body.bottom());
     assert_eq!(state.hits.tab_max_scroll, 0);
     assert!(state.hits.tab_scrollbar.is_empty());
 }

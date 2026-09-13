@@ -3,8 +3,9 @@ use ratatui::text::Span;
 use render::{display_width, put_text, ShellRenderState};
 
 const HEADER_ROWS: u16 = 1;
+const CONTROL_ROWS: u16 = 1;
 const FOOTER_ROWS: u16 = 1;
-const MIN_TAB_HEIGHT: u16 = HEADER_ROWS + 1 + FOOTER_ROWS;
+const MIN_TAB_HEIGHT: u16 = HEADER_ROWS + CONTROL_ROWS + 1 + FOOTER_ROWS;
 const TITLE_COLUMN: u16 = 3; // Padding, status icon, then space.
 
 fn wrapped_title_lines(title: &str, width: u16) -> Vec<String> {
@@ -110,9 +111,10 @@ pub(super) fn render(
         .collect::<Vec<_>>();
     let body = Rect::new(
         area.x,
-        area.y + HEADER_ROWS,
+        area.y + HEADER_ROWS + CONTROL_ROWS,
         area.width,
-        area.height.saturating_sub(HEADER_ROWS + FOOTER_ROWS),
+        area.height
+            .saturating_sub(HEADER_ROWS + CONTROL_ROWS + FOOTER_ROWS),
     );
     hits.tab_body = body;
     let titles = tabs
@@ -205,13 +207,7 @@ pub(super) fn render(
         scroll::render_list_scrollbar(buffer, hits.tab_scrollbar, metrics, palette);
     }
     if config.mouse_capture {
-        // Leave the sidebar's existing collapse control at the right edge.
-        hits.new_tab = Rect::new(
-            area.x,
-            area.bottom() - FOOTER_ROWS,
-            area.width.saturating_sub(2),
-            FOOTER_ROWS,
-        );
+        hits.new_tab = Rect::new(area.x, area.y + HEADER_ROWS, area.width, CONTROL_ROWS);
         put_text(
             buffer,
             hits.new_tab.x,

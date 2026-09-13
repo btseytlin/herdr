@@ -373,10 +373,10 @@ pub(crate) fn render_sidebar(
         super::scroll::render_list_scrollbar(buffer, track, metrics, palette);
     }
 
-    if let Some(row) = state.workspace_drop_indicator_row.filter(|row| {
-        *row >= workspace_area.y.saturating_add(1)
-            && *row < workspace_area.bottom().saturating_sub(1)
-    }) {
+    if let Some(row) = state
+        .workspace_drop_indicator_row
+        .filter(|row| *row >= body.y && *row < body.bottom())
+    {
         put_text(
             buffer,
             body.x,
@@ -387,25 +387,18 @@ pub(crate) fn render_sidebar(
         );
     }
 
-    let footer_y = workspace_area.bottom().saturating_sub(1);
-    if config.mouse_capture {
-        // With no Agents panel, this footer also holds the collapse button and its gap.
-        let workspace_area = Rect {
-            width: workspace_area
-                .width
-                .saturating_sub(if config.agents.enabled { 0 } else { 2 }),
-            ..workspace_area
-        };
+    let controls_y = workspace_area.y.saturating_add(1);
+    if config.mouse_capture && workspace_area.height >= WORKSPACE_HEADER_ROWS {
         hits.new_workspace = Rect::new(
             workspace_area.x,
-            footer_y,
+            controls_y,
             5.min(workspace_area.width),
             u16::from(workspace_area.height > 0),
         );
         put_text(
             buffer,
             workspace_area.x,
-            footer_y,
+            controls_y,
             workspace_area.width,
             " new",
             Style::default().fg(palette.overlay0),
@@ -414,7 +407,7 @@ pub(crate) fn render_sidebar(
         let launcher_width = if attention { 8 } else { 6 }.min(workspace_area.width);
         hits.global_launcher = Rect::new(
             workspace_area.right().saturating_sub(launcher_width),
-            footer_y,
+            controls_y,
             launcher_width,
             1,
         );
@@ -423,7 +416,7 @@ pub(crate) fn render_sidebar(
             put_text(
                 buffer,
                 start_x,
-                footer_y,
+                controls_y,
                 2,
                 "● ",
                 Style::default()
@@ -433,7 +426,7 @@ pub(crate) fn render_sidebar(
             put_text(
                 buffer,
                 start_x.saturating_add(2),
-                footer_y,
+                controls_y,
                 4,
                 "menu",
                 Style::default().fg(palette.overlay0),
@@ -442,7 +435,7 @@ pub(crate) fn render_sidebar(
             put_right_text(
                 buffer,
                 workspace_area,
-                footer_y,
+                controls_y,
                 "menu",
                 Style::default().fg(palette.overlay0),
             );

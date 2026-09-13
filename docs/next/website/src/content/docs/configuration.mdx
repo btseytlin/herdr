@@ -304,7 +304,7 @@ The active palette is applied in this order: built-in theme, `[theme.custom]`, t
 
 ## UI and sidebar
 
-The sidebar is the main Herdr dashboard. Search `ui.` in the [Config reference](/docs/config-reference/) for sizing, collapsed mode, Agent panel ordering, mouse behavior, pane borders, and other presentation settings.
+The sidebar is the main Herdr dashboard. In the expanded desktop sidebar, the new-space and menu buttons sit directly below the sidebar heading. Search `ui.` in the [Config reference](/docs/config-reference/) for sizing, collapsed mode, Agent panel ordering, mouse behavior, pane borders, and other presentation settings.
 
 `ui.pane_borders` accepts `"auto"` (the default, borders only for split panes), `"always"` (also frame a single pane), or `"off"`. A single-pane frame requires `ui.pane_outer_borders = true`, because all its edges are outer edges. Existing boolean values remain valid: `true` means `"auto"` and `false` means `"off"`.
 
@@ -317,7 +317,7 @@ To put tabs below Spaces, open Settings with `ctrl+b`, release, then `s`. Select
 vertical_tabs = true
 ```
 
-The default is `false`. The expanded desktop sidebar shows a separate Tabs section for the active Space. Drag its heading to resize the section. Wheel input and its scrollbar scroll the list without changing the active tab. Clicking, context menus, drag reordering, and keyboard tab navigation remain available. The Agents section stays below Tabs when enabled. Long tab titles wrap at `·`, spaces, and hyphens, with continuation lines aligned under the title. Words wider than the section split between complete characters. Each tab is limited to the section's visible height.
+The default is `false`. The expanded desktop sidebar shows a separate Tabs section for the active Space, with the new-tab button directly below its heading. Drag its heading to resize the section. Wheel input and its scrollbar scroll the list without changing the active tab. Clicking, context menus, drag reordering, and keyboard tab navigation remain available. The Agents section stays below Tabs when enabled. Long tab titles wrap at `·`, spaces, and hyphens, with continuation lines aligned under the title. Words wider than the section split between complete characters. Each tab is limited to the section's visible height.
 
 Collapsed, hidden, or too-short sidebars use horizontal tabs. Mobile keeps its switcher. `hide_tab_bar_when_single_tab` also applies to vertical tabs. The top or bottom strip remains available for status and mode indicators, so switching orientation does not resize terminal panes. Saved names and Auto Title are unchanged.
 

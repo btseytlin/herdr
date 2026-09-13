@@ -345,26 +345,19 @@ pub(super) fn render_expanded(
         super::scroll::render_list_scrollbar(buffer, track, metrics, palette);
     }
 
-    let footer_y = workspace_area.bottom().saturating_sub(1);
-    if config.mouse_capture {
-        // With no Agents panel, this footer also holds the collapse button and its gap.
-        let workspace_area = Rect {
-            width: workspace_area
-                .width
-                .saturating_sub(if config.agents.enabled { 0 } else { 2 }),
-            ..workspace_area
-        };
+    let controls_y = workspace_area.y.saturating_add(1);
+    if config.mouse_capture && workspace_area.height >= WORKSPACE_HEADER_ROWS {
         let label = format!(" new · {}", active_endpoint_label(state));
         hits.new_workspace = Rect::new(
             workspace_area.x,
-            footer_y,
+            controls_y,
             display_width(&label).min(workspace_area.width),
             u16::from(workspace_area.height > 0),
         );
         put_text(
             buffer,
             workspace_area.x,
-            footer_y,
+            controls_y,
             workspace_area.width,
             &label,
             Style::default().fg(palette.overlay0),
@@ -373,14 +366,14 @@ pub(super) fn render_expanded(
         let width = if attention { 8 } else { 6 }.min(workspace_area.width);
         hits.global_launcher = Rect::new(
             workspace_area.right().saturating_sub(width),
-            footer_y,
+            controls_y,
             width,
             1,
         );
         put_right_text(
             buffer,
             workspace_area,
-            footer_y,
+            controls_y,
             if attention { "● menu" } else { "menu" },
             Style::default().fg(if attention {
                 palette.accent
